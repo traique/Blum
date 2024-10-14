@@ -14,27 +14,17 @@
 (function() {
     'use strict';
 
-    let flowerSkipPercentage = 50;
-    let minIceHits = 1;
-    let minBombHits = 1;
-    let minDelayMs = 50;
-    let maxDelayMs = 150;
-    let autoClickPlay = true;
-    let bombHits = 0;
-    let iceHits = 0;
+    let GAME_SETTINGS = {
+        minBombHits: Math.floor(Math.random() * 2),
+        minIceHits: Math.floor(Math.random() * 2) + 2,
+        flowerSkipPercentage: Math.floor(Math.random() * 11) + 5,
+        dogSkipPercentage: Math.floor(Math.random() * 11) + 2,
+        minDelayMs: 2000,
+        maxDelayMs: 5000,
+        autoClickPlay: true
+    };
 
-    // Thêm biến để theo dõi số lần nhấp vào chó
-    let dogHits = 0;
-    // Thêm cài đặt cho số lần nhấp tối đa vào chó
-    let maxDogHits = 5;
-
-    localStorage.getItem("flowerSkipPercentage") ? flowerSkipPercentage = parseInt(localStorage.getItem("flowerSkipPercentage")) : localStorage.setItem("flowerSkipPercentage", flowerSkipPercentage);
-    localStorage.getItem("minIceHits") ? minIceHits = parseInt(localStorage.getItem("minIceHits")) : localStorage.setItem("minIceHits", minIceHits);
-    localStorage.getItem("minBombHits") ? minBombHits = parseInt(localStorage.getItem("minBombHits")) : localStorage.setItem("minBombHits", minBombHits);
-    localStorage.getItem("minDelayMs") ? minDelayMs = parseInt(localStorage.getItem("minDelayMs")) : localStorage.setItem("minDelayMs", minDelayMs);
-    localStorage.getItem("maxDelayMs") ? maxDelayMs = parseInt(localStorage.getItem("maxDelayMs")) : localStorage.setItem("maxDelayMs", maxDelayMs);
-    localStorage.getItem("autoClickPlay") ? autoClickPlay = localStorage.getItem("autoClickPlay") === 'true' : localStorage.setItem("autoClickPlay", autoClickPlay);
-    localStorage.getItem("maxDogHits") ? maxDogHits = parseInt(localStorage.getItem("maxDogHits")) : localStorage.setItem("maxDogHits", maxDogHits); // Lưu giá trị maxDogHits vào localStorage
+    let isGamePaused = false;
 
     function handleGameElement(element) {
         if (!element || !element.item) return;
@@ -50,110 +40,95 @@
             case "FREEZE":
                 processIce(element);
                 break;
-            case "DOG": // Thêm case "DOG" để xử lý biểu tượng chó
+            case "DOG":
                 processDog(element);
                 break;
         }
     }
 
     function processFlower(element) {
-        if (Math.random() * 100 > flowerSkipPercentage) {
+        const shouldSkip = Math.random() < (GAME_SETTINGS.flowerSkipPercentage / 100);
+        if (!shouldSkip) {
+            clickElement(element);
+        }
+    }
+
+    function processDog(element) {
+        const shouldSkip = Math.random() < (GAME_SETTINGS.dogSkipPercentage / 100);
+        if (!shouldSkip) {
             clickElement(element);
         }
     }
 
     function processBomb(element) {
-        if (bombHits < minBombHits) {
+        if (Math.random() < 0.5) {
             clickElement(element);
-            bombHits++;
         }
     }
 
     function processIce(element) {
-        if (iceHits < minIceHits) {
+        if (Math.random() < 0.7) {
             clickElement(element);
-            iceHits++;
-        }
-    }
-
-    // Hàm xử lý biểu tượng chó
-    function processDog(element) {
-        if (dogHits < maxDogHits) {
-            clickElement(element);
-            dogHits++;
         }
     }
 
     function clickElement(element) {
-        if (element && element.element) {
-            setTimeout(() => {
-                element.element.click();
-            }, minDelayMs + Math.random() * (maxDelayMs - minDelayMs));
+        if (element && element.onClick && typeof element.onClick === 'function') {
+            element.onClick(element);
         }
     }
 
-    const originalPush = Array.prototype.push;
-    Array.prototype.push = function(...args) {
-        const element = args[0];
-        handleGameElement(element);
-        return originalPush.apply(this, args);
-    };
-
-    function checkGameCompletion() {
-        const rewardElement = document.querySelector('.reward');
-        if (rewardElement) {
-            resetGameStats();
-
-            if (autoClickPlay) {
-                checkAndClickPlayButton();
-            }
-        }
-    }
-
-    function resetGameStats() {
-        bombHits = 0;
-        iceHits = 0;
-        dogHits = 0; // Đặt lại số lần nhấp vào chó khi trò chơi kết thúc
+    function getNewGameDelay() {
+        return Math.floor(Math.random() * (GAME_SETTINGS.maxDelayMs - GAME_SETTINGS.minDelayMs + 1) + GAME_SETTINGS.minDelayMs);
     }
 
     function checkAndClickPlayButton() {
-        const playButton = document.querySelector('[data-testid="play-button"]');
-        if (playButton) {
-            setTimeout(() => {
-                playButton.click();
-            }, 1000); // Chờ 1 giây trước khi nhấp vào nút "Play"
-        }
+        const playButtons = document.querySelectorAll('button.kit-button.is-large.is-primary, a.play-btn[href="/game"], button.kit-button.is-large.is-primary');
+
+        playButtons.forEach(button => {
+            if (!isGamePaused && GAME_SETTINGS.autoClickPlay && (/Play/.test(button.textContent) || /Continue/.test(button.textContent))) {
+                setTimeout(() => {
+                    button.click();
+                }, getNewGameDelay());
+            }
+        });
     }
 
-    const observer = new MutationObserver(checkGameCompletion);
-    observer.observe(document.body, { childList: true, subtree: true });
+    function continuousPlayButtonCheck() {
+        checkAndClickPlayButton();
+        setTimeout(continuousPlayButtonCheck, 1000);
+    }
 
-    checkAndClickPlayButton();
+    function AutoClaimAndStart() {
+        setInterval(() => {
+            const claimButton = document.querySelector('button.kit-button.is-large.is-drop.is-fill.button.is-done');
+            const startFarmingButton = document.querySelector('button.kit-button.is-large.is-primary.is-fill.button');
+            const continueButton = document.querySelector('button.kit-button.is-large.is-primary.is-fill.btn');
+            if (claimButton) {
+                claimButton.click();
+            } else if (startFarmingButton) {
+                startFarmingButton.click();
+            } else if (continueButton) {
+                continueButton.click();
+            }
+        }, Math.floor(Math.random() * 5000) + 5000);
+    }
 
-    // Tạo menu cài đặt
-    const settingsButton = document.createElement("button");
-    settingsButton.textContent = "Cài đặt Blum Auto Clicker";
-    settingsButton.style.position = "fixed";
-    settingsButton.style.top = "10px";
-    settingsButton.style.left = "10px";
-    settingsButton.style.zIndex = "9999";
-    document.body.appendChild(settingsButton);
+    function initializeGame() {
+        const originalPush = Array.prototype.push;
+        Array.prototype.push = function (...items) {
+            if (!isGamePaused) {
+                items.forEach(item => handleGameElement(item));
+            }
+            return originalPush.apply(this, items);
+        };
 
-    settingsButton.addEventListener("click", () => {
-        flowerSkipPercentage = parseInt(prompt("Tỷ lệ bỏ qua hoa (%):", flowerSkipPercentage));
-        minIceHits = parseInt(prompt("Số lần nhấp tối thiểu vào đá:", minIceHits));
-        minBombHits = parseInt(prompt("Số lần nhấp tối thiểu vào bom:", minBombHits));
-        maxDogHits = parseInt(prompt("Số lần nhấp tối đa vào chó:", maxDogHits)); // Thêm prompt cho maxDogHits
-        minDelayMs = parseInt(prompt("Độ trễ tối thiểu (ms):", minDelayMs));
-        maxDelayMs = parseInt(prompt("Độ trễ tối đa (ms):", maxDelayMs));
-        autoClickPlay = confirm("Tự động nhấp vào nút Play?");
+        continuousPlayButtonCheck();
+        AutoClaimAndStart();
+    }
 
-        localStorage.setItem("flowerSkipPercentage", flowerSkipPercentage);
-        localStorage.setItem("minIceHits", minIceHits);
-        localStorage.setItem("minBombHits", minBombHits);
-        localStorage.setItem("maxDogHits", maxDogHits); // Lưu giá trị maxDogHits vào localStorage
-        localStorage.setItem("minDelayMs", minDelayMs);
-        localStorage.setItem("maxDelayMs", maxDelayMs);
-        localStorage.setItem("autoClickPlay", autoClickPlay);
-    });
+    // Khởi tạo trò chơi
+    initializeGame();
+
+    // Thêm giao diện cài đặt (có thể thêm vào đây nếu cần)
 })();
